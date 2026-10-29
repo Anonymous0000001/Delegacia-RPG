@@ -1,6 +1,7 @@
 # Delegacia RPG
 
 Jogo Android nativo em Java, renderizado diretamente com `SurfaceView` e `Canvas`.
+Compatível com orientações vertical e horizontal; no modo horizontal, os três cômodos aparecem lado a lado.
 
 ## Como jogar
 

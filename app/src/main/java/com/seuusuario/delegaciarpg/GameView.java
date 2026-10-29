@@ -42,6 +42,9 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
     private volatile float playerX;
     private volatile float playerY;
+    private float playerFacingDegrees;
+    private float animationSeconds;
+    private boolean playerMoving;
     private volatile int dinheiro = 1500;
     private volatile int sucata = 50;
     private volatile int moral = 30;
@@ -98,6 +101,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             return;
         }
         ensureControls(width, height);
+        animationSeconds += deltaSeconds;
         if (dialogueSecondsRemaining > 0) {
             dialogueSecondsRemaining = Math.max(0, dialogueSecondsRemaining - deltaSeconds);
             if (dialogueSecondsRemaining == 0) {
@@ -124,7 +128,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         if (playerX == 0 && playerY == 0) {
             playerX = width * 0.5f;
-            playerY = height * 0.72f;
+            playerY = roomBoard(width, height).centerY();
         }
 
         float distanceToFrame = (float) Math.hypot(
@@ -136,19 +140,19 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         float directionY = (movingDown ? 1f : 0f) - (movingUp ? 1f : 0f);
         float directionLength = (float) Math.hypot(directionX, directionY);
         if (directionLength == 0) {
+            playerMoving = false;
             return;
         }
 
+        playerMoving = true;
+        playerFacingDegrees = (float) Math.toDegrees(Math.atan2(directionY, directionX)) + 90f;
         float speed = 220f * density * deltaSeconds;
         float radius = 16f * density;
-        playerX = clamp(playerX + directionX / directionLength * speed, radius, width - radius);
-        float minY = Math.max(300f * density, height * 0.34f);
-        float maxY = Math.min(height - 100f * density, height * 0.82f);
-        if (maxY < minY) {
-            minY = radius;
-            maxY = height - radius;
-        }
-        playerY = clamp(playerY + directionY / directionLength * speed, minY, maxY);
+        RectF board = roomBoard(width, height);
+        playerX = clamp(playerX + directionX / directionLength * speed,
+            board.left + radius, board.right - radius);
+        playerY = clamp(playerY + directionY / directionLength * speed,
+            board.top + radius, board.bottom - radius);
     }
 
     private float clamp(float value, float minimum, float maximum) {
@@ -176,34 +180,63 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         float height = canvas.getHeight();
         ensureControls(width, height);
         canvas.drawColor(Color.rgb(25, 31, 35));
+        drawFloorTexture(canvas, width, height);
         drawHeader(canvas, width);
         drawRooms(canvas, width, height);
         drawWeaponFrame(canvas);
+        drawPatrolVehicle(canvas, width, height);
         drawPlayer(canvas);
+        drawControlDock(canvas, width, height);
         drawControls(canvas);
         drawDialogue(canvas, width, height);
     }
 
     private void drawHeader(Canvas canvas, float width) {
-        drawText(canvas, "DELEGACIA RPG", 24f * density, 42f * density, 23f,
-                Color.WHITE, Paint.Align.LEFT, true);
-        drawText(canvas, "Reconstrua a delegacia", 24f * density, 66f * density, 13f,
-                Color.rgb(174, 187, 184), Paint.Align.LEFT, false);
+        boolean landscape = isLandscape(width, getHeight());
+        float headerHeight = headerHeight(width, getHeight());
+        setColor(Color.rgb(17, 21, 24));
+        canvas.drawRect(0, 0, width, headerHeight, paint);
+        setStrokeColor(Color.rgb(72, 81, 84));
+        paint.setStrokeWidth(1f * density);
+        canvas.drawLine(0, headerHeight, width, headerHeight, paint);
 
-        drawText(canvas, "R$ " + dinheiro, 24f * density, 105f * density, 13f,
-            Color.rgb(208, 235, 119), Paint.Align.LEFT, true);
-        drawText(canvas, "SUCATA " + sucata, width * 0.5f, 105f * density, 12f,
-            Color.rgb(238, 191, 111), Paint.Align.CENTER, true);
-        drawText(canvas, "MORAL " + moral, width - 24f * density, 105f * density, 12f,
-            Color.rgb(174, 187, 184), Paint.Align.RIGHT, true);
-        drawText(canvas, nomeFase, 24f * density, 134f * density, 10f,
-            Color.rgb(205, 215, 205), Paint.Align.LEFT, true);
-        drawText(canvas, "CELAS " + celasOcupadas + "/" + capacidadeCelas
-                + " | VTR " + viaturasAtivas + " | DET " + detetivesContratados,
-            width - 24f * density, 134f * density, 9f,
-            Color.rgb(205, 215, 205), Paint.Align.RIGHT, true);
-        drawText(canvas, statusMessage, width * 0.5f, 158f * density, 9f,
-            Color.rgb(174, 187, 184), Paint.Align.CENTER, false);
+        if (landscape) {
+            drawText(canvas, "DELEGACIA RPG", 24f * density, 24f * density, 16f,
+                Color.WHITE, Paint.Align.LEFT, true);
+            drawText(canvas, "R$ " + dinheiro, 24f * density, 49f * density, 11f,
+                Color.rgb(208, 235, 119), Paint.Align.LEFT, true);
+            drawText(canvas, "SUCATA " + sucata, width * 0.5f, 49f * density, 11f,
+                Color.rgb(238, 191, 111), Paint.Align.CENTER, true);
+            drawText(canvas, "MORAL " + moral, width - 24f * density, 49f * density, 11f,
+                Color.rgb(174, 187, 184), Paint.Align.RIGHT, true);
+            drawText(canvas, nomeFase, 24f * density, 75f * density, 9f,
+                Color.rgb(205, 215, 205), Paint.Align.LEFT, true);
+            drawText(canvas, "CELAS " + celasOcupadas + "/" + capacidadeCelas
+                    + " | VTR " + viaturasAtivas + " | DET " + detetivesContratados,
+                width - 24f * density, 75f * density, 8f,
+                Color.rgb(205, 215, 205), Paint.Align.RIGHT, true);
+            drawText(canvas, statusMessage, width * 0.5f, 88f * density, 8f,
+                Color.rgb(174, 187, 184), Paint.Align.CENTER, false);
+        } else {
+            drawText(canvas, "DELEGACIA RPG", 24f * density, 42f * density, 23f,
+                Color.WHITE, Paint.Align.LEFT, true);
+            drawText(canvas, "Reconstrua a delegacia", 24f * density, 66f * density, 13f,
+                Color.rgb(174, 187, 184), Paint.Align.LEFT, false);
+            drawText(canvas, "R$ " + dinheiro, 24f * density, 105f * density, 13f,
+                Color.rgb(208, 235, 119), Paint.Align.LEFT, true);
+            drawText(canvas, "SUCATA " + sucata, width * 0.5f, 105f * density, 12f,
+                Color.rgb(238, 191, 111), Paint.Align.CENTER, true);
+            drawText(canvas, "MORAL " + moral, width - 24f * density, 105f * density, 12f,
+                Color.rgb(174, 187, 184), Paint.Align.RIGHT, true);
+            drawText(canvas, nomeFase, 24f * density, 134f * density, 10f,
+                Color.rgb(205, 215, 205), Paint.Align.LEFT, true);
+            drawText(canvas, "CELAS " + celasOcupadas + "/" + capacidadeCelas
+                    + " | VTR " + viaturasAtivas + " | DET " + detetivesContratados,
+                width - 24f * density, 134f * density, 9f,
+                Color.rgb(205, 215, 205), Paint.Align.RIGHT, true);
+            drawText(canvas, statusMessage, width * 0.5f, 158f * density, 9f,
+                Color.rgb(174, 187, 184), Paint.Align.CENTER, false);
+        }
     }
 
     private void drawRooms(Canvas canvas, float width, float height) {
@@ -213,6 +246,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             boolean unlocked = room.isUnlocked();
             setColor(unlocked ? Color.rgb(46, 105, 70) : Color.rgb(112, 47, 45));
             canvas.drawRoundRect(bounds, 10f * density, 10f * density, paint);
+            drawRoomTexture(canvas, bounds, room, unlocked);
 
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(1.5f * density);
@@ -220,11 +254,14 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             canvas.drawRoundRect(bounds, 10f * density, 10f * density, paint);
             paint.setStyle(Paint.Style.FILL);
 
-            float left = bounds.left + 16f * density;
-                drawText(canvas, room.getName(), left, bounds.top + 25f * density, 16f,
-                    Color.WHITE, Paint.Align.LEFT, true);
+                boolean landscape = isLandscape(width, height);
+                float left = bounds.left + (landscape ? 8f : 16f) * density;
+                float titleSize = landscape ? 11f : 16f;
+                String title = landscape ? compactRoomName(room) : room.getName();
+                drawText(canvas, title, left, bounds.top + (landscape ? 18f : 25f) * density,
+                    titleSize, Color.WHITE, Paint.Align.LEFT, true);
             drawText(canvas, unlocked ? "REFORMADO" : "EM RUÍNAS", left,
-                    bounds.top + 45f * density, 10f,
+                    bounds.top + (landscape ? 33f : 45f) * density, landscape ? 8f : 10f,
                     unlocked ? Color.rgb(187, 235, 174) : Color.rgb(250, 191, 160),
                     Paint.Align.LEFT, true);
             if (unlocked) {
@@ -236,27 +273,198 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
                 } else {
                     roomStatus = "Base operacional";
                 }
-                drawText(canvas, roomStatus, left, bounds.bottom - 15f * density,
-                        11f, Color.rgb(223, 236, 218), Paint.Align.LEFT, false);
+                drawText(canvas, roomStatus, left, bounds.bottom - 9f * density,
+                    landscape ? 7f : 11f, Color.rgb(223, 236, 218), Paint.Align.LEFT, false);
             } else {
-                drawText(canvas, "Custo: " + room.getCostSucata() + " sucata  |  "
-                                + room.getCostMoral() + " moral",
-                        left, bounds.bottom - 15f * density, 12f,
+                String costs = landscape
+                    ? room.getCostSucata() + " suc / " + room.getCostMoral() + " moral"
+                    : "Custo: " + room.getCostSucata() + " sucata  |  "
+                        + room.getCostMoral() + " moral";
+                drawText(canvas, costs, left, bounds.bottom - 9f * density,
+                    landscape ? 7f : 12f,
                         Color.rgb(245, 220, 194), Paint.Align.LEFT, false);
             }
         }
     }
 
+    private void drawFloorTexture(Canvas canvas, float width, float height) {
+        RectF board = roomBoard(width, height);
+        setColor(Color.rgb(34, 39, 43));
+        canvas.drawRect(board, paint);
+        canvas.save();
+        canvas.clipRect(board);
+
+        float tileSize = 42f * density;
+        int row = 0;
+        for (float y = board.top; y < board.bottom; y += tileSize) {
+            int column = 0;
+            for (float x = board.left; x < board.right; x += tileSize) {
+                int shade = (row + column) % 2 == 0 ? 39 : 43;
+                setColor(Color.rgb(shade, shade + 5, shade + 7));
+                canvas.drawRect(x, y, x + tileSize, y + tileSize, paint);
+                column++;
+            }
+            row++;
+        }
+
+        setStrokeColor(Color.argb(75, 12, 16, 20));
+        paint.setStrokeWidth(1f * density);
+        for (float x = board.left; x <= board.right; x += tileSize) {
+            canvas.drawLine(x, board.top, x, board.bottom, paint);
+        }
+        for (float y = board.top; y <= board.bottom; y += tileSize) {
+            canvas.drawLine(board.left, y, board.right, y, paint);
+        }
+
+        for (int index = 0; index < 7; index++) {
+            float stainX = board.left + ((index * 137f + 53f) % Math.max(1f, width - 36f * density));
+            float stainY = board.top + ((index * 83f + 29f) % Math.max(1f, board.height()));
+            setColor(Color.argb(24, 12, 18, 19));
+            canvas.drawOval(stainX, stainY, stainX + 16f * density,
+                    stainY + 7f * density, paint);
+        }
+
+        for (int index = 0; index < 6; index++) {
+            float drift = (animationSeconds * (8f + index * 1.5f) + index * 61f) % Math.max(1f, board.width());
+            float moteY = board.top + ((index * 97f + 41f) % Math.max(1f, board.height()));
+            setColor(Color.argb(50, 196, 200, 176));
+            canvas.drawCircle(board.left + drift, moteY, (1f + index % 2) * density, paint);
+        }
+        canvas.restore();
+    }
+
+    private void drawRoomTexture(Canvas canvas, RectF bounds, Room room, boolean unlocked) {
+        canvas.save();
+        canvas.clipRect(bounds);
+        int baseShade = unlocked ? 73 : 63;
+        setColor(Color.argb(40, baseShade + 15, baseShade + 18, baseShade + 15));
+        float tileSize = 22f * density;
+        for (float x = bounds.left; x < bounds.right; x += tileSize) {
+            for (float y = bounds.top; y < bounds.bottom; y += tileSize) {
+                if ((((int) ((x - bounds.left) / tileSize))
+                        + ((int) ((y - bounds.top) / tileSize))) % 2 == 0) {
+                    canvas.drawRect(x, y, x + tileSize, y + tileSize, paint);
+                }
+            }
+        }
+
+        if (room.getName().contains("Cela")) {
+            paint.setStrokeWidth(2f * density);
+            setStrokeColor(Color.argb(unlocked ? 105 : 135, 22, 25, 28));
+            float barSpacing = 18f * density;
+            for (float x = bounds.left + 12f * density; x < bounds.right; x += barSpacing) {
+                canvas.drawLine(x, bounds.top, x, bounds.bottom, paint);
+            }
+            setColor(Color.argb(100, 145, 153, 143));
+            canvas.drawRoundRect(bounds.left + 18f * density, bounds.top + 17f * density,
+                    bounds.left + 60f * density, bounds.top + 31f * density,
+                    4f * density, 4f * density, paint);
+        } else if (room.getName().contains("Arsenal")) {
+            setColor(Color.argb(105, 27, 35, 40));
+            canvas.drawRect(bounds.left + 15f * density, bounds.top + 17f * density,
+                    bounds.right - 15f * density, bounds.top + 26f * density, paint);
+            paint.setStrokeWidth(1.5f * density);
+            setStrokeColor(Color.argb(135, 205, 176, 113));
+            for (int index = 0; index < 4; index++) {
+                float rackX = bounds.left + (34f + index * 20f) * density;
+                canvas.drawLine(rackX, bounds.top + 7f * density,
+                        rackX + 5f * density, bounds.top + 17f * density, paint);
+            }
+        } else {
+            setColor(Color.argb(115, 38, 42, 42));
+            canvas.drawRoundRect(bounds.centerX() - 34f * density,
+                    bounds.centerY() - 11f * density, bounds.centerX() + 34f * density,
+                    bounds.centerY() + 8f * density, 5f * density, 5f * density, paint);
+            setColor(Color.argb(120, 115, 104, 78));
+            canvas.drawRect(bounds.centerX() - 30f * density, bounds.centerY() - 15f * density,
+                    bounds.centerX() + 30f * density, bounds.centerY() - 9f * density, paint);
+        }
+        canvas.restore();
+    }
+
     private void drawPlayer(Canvas canvas) {
-        float radius = 13f * density;
-        setColor(Color.rgb(68, 166, 207));
-        canvas.drawCircle(playerX, playerY, radius, paint);
-        setStrokeColor(Color.WHITE);
-        paint.setStrokeWidth(2f * density);
-        canvas.drawCircle(playerX, playerY, radius, paint);
-        drawText(canvas, "POLICIAL", playerX, playerY - 23f * density, 9f,
+        float step = playerMoving ? (float) Math.sin(animationSeconds * 13f) : 0f;
+        float idleBreath = playerMoving ? 0f : (float) Math.sin(animationSeconds * 2.4f) * 0.8f;
+        float bob = Math.abs(step) * 1.6f * density + idleBreath * density;
+        float legSwing = step * 4f * density;
+
+        setColor(Color.argb(90, 8, 12, 14));
+        canvas.drawOval(playerX - 10f * density, playerY + 10f * density,
+            playerX + 10f * density, playerY + 15f * density, paint);
+
+        canvas.save();
+        canvas.rotate(playerFacingDegrees, playerX, playerY);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStrokeWidth(3.2f * density);
+        setStrokeColor(Color.rgb(18, 27, 42));
+        canvas.drawLine(playerX - 3f * density, playerY + 4f * density + bob,
+            playerX - 4f * density - legSwing, playerY + 13f * density, paint);
+        canvas.drawLine(playerX + 3f * density, playerY + 4f * density + bob,
+            playerX + 4f * density + legSwing, playerY + 13f * density, paint);
+
+        setColor(Color.rgb(29, 66, 104));
+        canvas.drawRoundRect(playerX - 6.5f * density, playerY - 5f * density + bob,
+            playerX + 6.5f * density, playerY + 7f * density + bob,
+            3f * density, 3f * density, paint);
+        paint.setStrokeWidth(2.4f * density);
+        setStrokeColor(Color.rgb(25, 55, 87));
+        canvas.drawLine(playerX - 5f * density, playerY - 2f * density + bob,
+            playerX - 8f * density - legSwing * 0.35f, playerY + 5f * density + bob, paint);
+        canvas.drawLine(playerX + 5f * density, playerY - 2f * density + bob,
+            playerX + 8f * density + legSwing * 0.35f, playerY + 5f * density + bob, paint);
+
+        setColor(Color.rgb(220, 180, 139));
+        canvas.drawCircle(playerX, playerY - 10f * density + bob, 4.7f * density, paint);
+        setColor(Color.rgb(18, 29, 49));
+        canvas.drawRoundRect(playerX - 5f * density, playerY - 15f * density + bob,
+            playerX + 5f * density, playerY - 12f * density + bob,
+            2f * density, 2f * density, paint);
+        setColor(Color.rgb(241, 195, 72));
+        canvas.drawCircle(playerX + 3.2f * density, playerY - 1f * density + bob,
+            1.4f * density, paint);
+        canvas.restore();
+
+        drawText(canvas, "POLICIAL", playerX, playerY - 20f * density - bob, 8f,
                 Color.WHITE, Paint.Align.CENTER, true);
     }
+
+        private void drawPatrolVehicle(Canvas canvas, float width, float height) {
+        RectF board = roomBoard(width, height);
+        float centerX = width * 0.5f;
+            float centerY = isLandscape(width, height)
+                ? board.bottom - 12f * density
+                : board.top + board.height() * 0.327f;
+        float carWidth = 34f * density;
+        float carHeight = 17f * density;
+        RectF body = new RectF(centerX - carWidth * 0.5f, centerY - carHeight * 0.5f,
+            centerX + carWidth * 0.5f, centerY + carHeight * 0.5f);
+        setColor(Color.argb(100, 8, 11, 13));
+        canvas.drawOval(body.left + 2f * density, body.bottom - 1f * density,
+            body.right + 2f * density, body.bottom + 4f * density, paint);
+        setColor(Color.rgb(212, 219, 218));
+        canvas.drawRoundRect(body, 5f * density, 5f * density, paint);
+        setColor(Color.rgb(35, 53, 69));
+        canvas.drawRoundRect(body.left + 9f * density, body.top + 2f * density,
+            body.right - 8f * density, body.bottom - 2f * density,
+            3f * density, 3f * density, paint);
+        setColor(Color.rgb(21, 25, 29));
+        canvas.drawCircle(body.left + 8f * density, body.bottom - 1f * density,
+            3f * density, paint);
+        canvas.drawCircle(body.right - 8f * density, body.bottom - 1f * density,
+            3f * density, paint);
+
+        float pulse = (float) Math.sin(animationSeconds * 8f);
+        int redAlpha = 115 + (int) (Math.max(0f, pulse) * 140f);
+        int blueAlpha = 115 + (int) (Math.max(0f, -pulse) * 140f);
+        setColor(Color.argb(redAlpha, 255, 45, 50));
+        canvas.drawRoundRect(centerX - 5f * density, body.top - 3f * density,
+            centerX, body.top + 1f * density, density, density, paint);
+        setColor(Color.argb(blueAlpha, 45, 130, 255));
+        canvas.drawRoundRect(centerX, body.top - 3f * density,
+            centerX + 5f * density, body.top + 1f * density, density, density, paint);
+        drawText(canvas, "VTR", centerX, body.bottom + 11f * density, 7f,
+            Color.rgb(223, 229, 220), Paint.Align.CENTER, true);
+        }
 
     private void drawWeaponFrame(Canvas canvas) {
         setColor(Color.rgb(30, 35, 45));
@@ -289,11 +497,18 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         float boxHeight = lines.size() * lineHeight + speakerHeight + padding * 2f;
         float boxWidth = width - 32f * density;
         float boxX = (width - boxWidth) * 0.5f;
-        float boxY = playerY - 30f * density - boxHeight;
-        float minY = 176f * density;
-        float maxY = Math.max(minY, height - 175f * density - boxHeight);
-        if (boxY < minY || boxY > maxY) {
-            boxY = Math.max(minY, Math.min(playerY + 34f * density, maxY));
+        RectF board = roomBoard(width, height);
+        float boxY;
+        if (isLandscape(width, height)) {
+            boxY = clamp(board.centerY() - boxHeight * 0.5f,
+                    board.top + 2f * density, board.bottom - boxHeight - 2f * density);
+        } else {
+            boxY = playerY - 30f * density - boxHeight;
+            float minY = headerHeight(width, height) + 4f * density;
+            float maxY = Math.max(minY, board.bottom - boxHeight);
+            if (boxY < minY || boxY > maxY) {
+                boxY = Math.max(minY, Math.min(playerY + 34f * density, maxY));
+            }
         }
 
         RectF bubble = new RectF(boxX, boxY, boxX + boxWidth, boxY + boxHeight);
@@ -371,15 +586,58 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
         }
     }
 
+    private void drawControlDock(Canvas canvas, float width, float height) {
+        float top = height - controlsPanelHeight(width, height);
+        setColor(Color.argb(238, 12, 17, 21));
+        canvas.drawRect(0, top, width, height, paint);
+        setStrokeColor(Color.rgb(63, 72, 75));
+        paint.setStrokeWidth(1f * density);
+        canvas.drawLine(0, top, width, top, paint);
+    }
+
     private RectF roomBoard(float width, float height) {
-        return new RectF(0, 170f * density, width, height - 165f * density);
+        float top = headerHeight(width, height) + (isLandscape(width, height) ? 6f : 0f) * density;
+        return new RectF(0, top, width, height - controlsPanelHeight(width, height));
     }
 
     private RectF roomBounds(Room room, float width, RectF board) {
+        if (isLandscape(width, getHeight())) {
+            int index = delegaciaRooms.indexOf(room);
+            float margin = 16f * density;
+            float gap = 9f * density;
+            float roomWidth = (width - 2f * margin - gap * (delegaciaRooms.size() - 1))
+                    / delegaciaRooms.size();
+            float top = board.top + 23f * density;
+            float bottom = board.bottom - 25f * density;
+            float left = margin + index * (roomWidth + gap);
+            return new RectF(left, top, left + roomWidth, bottom);
+        }
         return new RectF(room.getX() * width,
                 board.top + room.getY() * board.height(),
                 (room.getX() + room.getWidth()) * width,
                 board.top + (room.getY() + room.getHeight()) * board.height());
+    }
+
+    private String compactRoomName(Room room) {
+        if (room.getName().contains("Recep")) {
+            return "RECEPCAO";
+        }
+        if (room.getName().contains("Arsenal")) {
+            return "ARSENAL";
+        }
+        return "CELAS";
+    }
+
+    private boolean isLandscape(float width, float height) {
+        return width > height;
+    }
+
+    private float headerHeight(float width, float height) {
+        return (isLandscape(width, height) ? 94f : 170f) * density;
+    }
+
+    private float controlsPanelHeight(float width, float height) {
+        return (isLandscape(width, height) ? 120f : 190f) * density;
     }
 
     private synchronized void ensureControls(float width, float height) {
@@ -391,25 +649,30 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
         controlsWidth = screenWidth;
         controlsHeight = screenHeight;
-        float buttonSize = Math.min(50f * density, width * 0.15f);
-        float gap = 6f * density;
-        float left = 16f * density;
-        float bottomY = height - buttonSize - 16f * density;
-        btnLeft = new Button(left, bottomY, buttonSize, buttonSize, "◀");
-        btnRight = new Button(left + 2f * (buttonSize + gap), bottomY,
-                buttonSize, buttonSize, "▶");
-        btnUp = new Button(left + buttonSize + gap, bottomY - buttonSize - gap,
-                buttonSize, buttonSize, "▲");
-        btnDown = new Button(left + buttonSize + gap, bottomY,
-                buttonSize, buttonSize, "▼");
+        boolean landscape = isLandscape(width, height);
+        float buttonSize = (landscape ? 31f : 50f) * density;
+        float gap = (landscape ? 4f : 6f) * density;
+        float left = (landscape ? 24f : 24f) * density;
+        float bottomInset = 24f * density;
+        float downY = height - buttonSize - bottomInset;
+        float middleY = downY - buttonSize - gap;
+        float upperY = middleY - buttonSize - gap;
+        btnLeft = new Button(left, middleY, buttonSize, buttonSize, "◀");
+        btnRight = new Button(left + 2f * (buttonSize + gap), middleY,
+            buttonSize, buttonSize, "▶");
+        btnUp = new Button(left + buttonSize + gap, upperY, buttonSize, buttonSize, "▲");
+        btnDown = new Button(left + buttonSize + gap, downY, buttonSize, buttonSize, "▼");
 
         float dpadRight = left + 3f * buttonSize + 2f * gap;
-        float actionWidth = Math.min(136f * density,
-            Math.max(76f * density, width - dpadRight - 24f * density));
-        float actionHeight = 34f * density;
-        float actionGap = 5f * density;
-        float actionX = width - actionWidth - 14f * density;
-        float actionBottomY = height - 16f * density;
+        float rightInset = (landscape ? 24f : 24f) * density;
+        float minimumActionWidth = (landscape ? 100f : 104f) * density;
+        float maximumActionWidth = (landscape ? 154f : 160f) * density;
+        float actionWidth = Math.min(maximumActionWidth,
+            Math.max(minimumActionWidth, width - dpadRight - 2f * rightInset));
+        float actionHeight = (landscape ? 22f : 34f) * density;
+        float actionGap = (landscape ? 4f : 6f) * density;
+        float actionX = width - actionWidth - rightInset;
+        float actionBottomY = height - bottomInset;
         btnPatrulha = new Button(actionX, actionBottomY - actionHeight,
             actionWidth, actionHeight, "PATRULHA");
         btnInvestigar = new Button(actionX, actionBottomY - 2f * actionHeight - actionGap,
@@ -420,15 +683,24 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
             actionWidth, actionHeight, "HACKEAR?");
 
         RectF board = roomBoard(width, height);
-        float gapTop = board.top + board.height() * 0.635f;
-        float gapBottom = board.top + board.height() * 0.71f;
-        float frameWidth = Math.min(88f * density, width * 0.28f);
-        float frameHeight = Math.max(12f * density, gapBottom - gapTop - 3f * density);
-        float frameCenterY = (gapTop + gapBottom) * 0.5f;
-        quadroEspingardaRect.set(width * 0.5f - frameWidth * 0.5f,
-            frameCenterY - frameHeight * 0.5f,
-            width * 0.5f + frameWidth * 0.5f,
-            frameCenterY + frameHeight * 0.5f);
+        if (landscape) {
+            float frameWidth = Math.min(70f * density, width * 0.14f);
+            float frameHeight = 16f * density;
+            quadroEspingardaRect.set(width * 0.5f - frameWidth * 0.5f,
+                    board.top + 2f * density,
+                    width * 0.5f + frameWidth * 0.5f,
+                    board.top + 2f * density + frameHeight);
+        } else {
+            float gapTop = board.top + board.height() * 0.635f;
+            float gapBottom = board.top + board.height() * 0.71f;
+            float frameWidth = Math.min(88f * density, width * 0.28f);
+            float frameHeight = Math.max(12f * density, gapBottom - gapTop - 3f * density);
+            float frameCenterY = (gapTop + gapBottom) * 0.5f;
+            quadroEspingardaRect.set(width * 0.5f - frameWidth * 0.5f,
+                    frameCenterY - frameHeight * 0.5f,
+                    width * 0.5f + frameWidth * 0.5f,
+                    frameCenterY + frameHeight * 0.5f);
+        }
     }
 
     private void updateMovementButtons(MotionEvent event, int excludedPointerIndex) {
@@ -585,9 +857,14 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         ensureControls(width, height);
+        RectF board = roomBoard(width, height);
         if (playerX == 0 && playerY == 0) {
             playerX = width * 0.5f;
-            playerY = height * 0.72f;
+            playerY = board.centerY();
+        } else {
+            float radius = 16f * density;
+            playerX = clamp(playerX, board.left + radius, board.right - radius);
+            playerY = clamp(playerY, board.top + radius, board.bottom - radius);
         }
     }
 
