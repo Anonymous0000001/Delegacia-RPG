@@ -1,0 +1,30 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.seuusuario.delegaciarpg'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.seuusuario.delegaciarpg'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    implementation 'com.badlogicgames.gdx:gdx:1.13.5'
+    implementation 'com.badlogicgames.gdx:gdx-backend-android:1.13.5'
+    runtimeOnly 'com.badlogicgames.gdx:gdx-platform:1.13.5:natives-armeabi-v7a'
+    runtimeOnly 'com.badlogicgames.gdx:gdx-platform:1.13.5:natives-arm64-v8a'
+    runtimeOnly 'com.badlogicgames.gdx:gdx-platform:1.13.5:natives-x86'
+    runtimeOnly 'com.badlogicgames.gdx:gdx-platform:1.13.5:natives-x86_64'
+}
