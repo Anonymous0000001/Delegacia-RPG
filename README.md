@@ -2,6 +2,7 @@
 
 Jogo Android nativo em Java, renderizado diretamente com `SurfaceView` e `Canvas`.
 Compatível com orientações vertical e horizontal; no modo horizontal, os três cômodos aparecem lado a lado.
+Os ambientes têm pisos em perspectiva e interiores próprios para recepção, arsenal e celas, com detalhes de desgaste.
 
 ## Como jogar
 

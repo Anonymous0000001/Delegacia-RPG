@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -19,6 +20,7 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private final Random random = new Random();
     private final NPCInteractionManager npcInteractionManager = new NPCInteractionManager();
     private final RectF quadroEspingardaRect = new RectF();
+    private final Path scenePath = new Path();
     private final float density;
     private Button btnUp;
     private Button btnDown;
@@ -289,39 +291,72 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
 
     private void drawFloorTexture(Canvas canvas, float width, float height) {
         RectF board = roomBoard(width, height);
-        setColor(Color.rgb(34, 39, 43));
+        setColor(Color.rgb(27, 32, 35));
         canvas.drawRect(board, paint);
         canvas.save();
         canvas.clipRect(board);
 
-        float tileSize = 42f * density;
-        int row = 0;
-        for (float y = board.top; y < board.bottom; y += tileSize) {
-            int column = 0;
-            for (float x = board.left; x < board.right; x += tileSize) {
-                int shade = (row + column) % 2 == 0 ? 39 : 43;
-                setColor(Color.rgb(shade, shade + 5, shade + 7));
-                canvas.drawRect(x, y, x + tileSize, y + tileSize, paint);
-                column++;
-            }
-            row++;
+        float wallBottom = board.top + board.height() * 0.35f;
+        setColor(Color.rgb(31, 39, 41));
+        canvas.drawRect(board.left, board.top, board.right, wallBottom, paint);
+        setColor(Color.rgb(23, 29, 32));
+        canvas.drawRect(board.left, wallBottom, board.right, board.bottom, paint);
+
+        float panelWidth = 74f * density;
+        setStrokeColor(Color.argb(65, 138, 150, 143));
+        paint.setStrokeWidth(1f * density);
+        for (float x = board.left + panelWidth; x < board.right; x += panelWidth) {
+            canvas.drawLine(x, board.top, x, wallBottom, paint);
+        }
+        setColor(Color.rgb(74, 81, 76));
+        canvas.drawRect(board.left, wallBottom - 2f * density, board.right,
+                wallBottom + 3f * density, paint);
+
+        float tileSize = 40f * density;
+        for (float y = wallBottom + tileSize * 0.35f; y < board.bottom; y += tileSize) {
+            float perspective = (y - wallBottom) / Math.max(1f, board.bottom - wallBottom);
+            float inset = (1f - perspective) * width * 0.12f;
+            setColor(Color.rgb(34 + (int) (perspective * 12f),
+                    39 + (int) (perspective * 12f), 41 + (int) (perspective * 10f)));
+            canvas.drawRect(board.left + inset, y, board.right - inset,
+                    Math.min(board.bottom, y + tileSize * 0.48f), paint);
         }
 
-        setStrokeColor(Color.argb(75, 12, 16, 20));
+        setStrokeColor(Color.argb(95, 10, 14, 17));
         paint.setStrokeWidth(1f * density);
-        for (float x = board.left; x <= board.right; x += tileSize) {
-            canvas.drawLine(x, board.top, x, board.bottom, paint);
+        int floorColumns = Math.max(4, (int) (width / (tileSize * 1.7f)));
+        float vanishingX = board.centerX();
+        for (int column = 0; column <= floorColumns; column++) {
+            float bottomX = board.left + board.width() * column / floorColumns;
+            canvas.drawLine(vanishingX + (bottomX - vanishingX) * 0.28f, wallBottom,
+                    bottomX, board.bottom, paint);
         }
-        for (float y = board.top; y <= board.bottom; y += tileSize) {
+        int floorRows = 6;
+        for (int row = 1; row <= floorRows; row++) {
+            float progress = row / (float) floorRows;
+            float y = wallBottom + (board.bottom - wallBottom) * progress * progress;
             canvas.drawLine(board.left, y, board.right, y, paint);
         }
 
         for (int index = 0; index < 7; index++) {
             float stainX = board.left + ((index * 137f + 53f) % Math.max(1f, width - 36f * density));
             float stainY = board.top + ((index * 83f + 29f) % Math.max(1f, board.height()));
-            setColor(Color.argb(24, 12, 18, 19));
+            setColor(Color.argb(42, 8, 12, 13));
             canvas.drawOval(stainX, stainY, stainX + 16f * density,
                     stainY + 7f * density, paint);
+        }
+
+        for (int index = 0; index < 8; index++) {
+            float crackX = board.left + ((index * 173f + 91f) % Math.max(1f, board.width()));
+            float crackY = wallBottom + ((index * 61f + 23f) % Math.max(1f, board.height() * 0.48f));
+            setStrokeColor(Color.argb(75, 9, 12, 12));
+            paint.setStrokeWidth(1.2f * density);
+            scenePath.reset();
+            scenePath.moveTo(crackX, crackY);
+            scenePath.lineTo(crackX + 4f * density, crackY + 6f * density);
+            scenePath.lineTo(crackX + 1f * density, crackY + 11f * density);
+            scenePath.lineTo(crackX + 7f * density, crackY + 17f * density);
+            canvas.drawPath(scenePath, paint);
         }
 
         for (int index = 0; index < 6; index++) {
@@ -336,50 +371,253 @@ public class GameView extends SurfaceView implements Runnable, SurfaceHolder.Cal
     private void drawRoomTexture(Canvas canvas, RectF bounds, Room room, boolean unlocked) {
         canvas.save();
         canvas.clipRect(bounds);
-        int baseShade = unlocked ? 73 : 63;
-        setColor(Color.argb(40, baseShade + 15, baseShade + 18, baseShade + 15));
-        float tileSize = 22f * density;
-        for (float x = bounds.left; x < bounds.right; x += tileSize) {
-            for (float y = bounds.top; y < bounds.bottom; y += tileSize) {
-                if ((((int) ((x - bounds.left) / tileSize))
-                        + ((int) ((y - bounds.top) / tileSize))) % 2 == 0) {
-                    canvas.drawRect(x, y, x + tileSize, y + tileSize, paint);
-                }
+        float wallBottom = bounds.top + bounds.height() * 0.58f;
+        int wallBase = unlocked ? 52 : 39;
+        setColor(Color.rgb(wallBase + 1, wallBase + 8, wallBase + 9));
+        canvas.drawRect(bounds.left, bounds.top, bounds.right, wallBottom, paint);
+
+        setColor(Color.rgb(unlocked ? 63 : 48, unlocked ? 67 : 53, unlocked ? 64 : 53));
+        canvas.drawRect(bounds.left, wallBottom, bounds.right, bounds.bottom, paint);
+        drawRoomFloor(canvas, bounds, wallBottom, unlocked);
+        drawWallPanels(canvas, bounds, wallBottom, room);
+
+        if (room.getName().contains("Cela")) {
+            drawCellInterior(canvas, bounds, wallBottom, unlocked);
+        } else if (room.getName().contains("Arsenal")) {
+            drawArsenalInterior(canvas, bounds, wallBottom, unlocked);
+        } else {
+            drawReceptionInterior(canvas, bounds, wallBottom, unlocked);
+        }
+
+        if (!unlocked) {
+            drawRubble(canvas, bounds);
+        }
+        canvas.restore();
+    }
+
+    private void drawRoomFloor(Canvas canvas, RectF bounds, float wallBottom, boolean unlocked) {
+        float tileHeight = Math.max(5f * density, (bounds.bottom - wallBottom) * 0.23f);
+        int rows = 3;
+        for (int row = 0; row < rows; row++) {
+            float top = wallBottom + (bounds.bottom - wallBottom) * row / rows;
+            float bottom = wallBottom + (bounds.bottom - wallBottom) * (row + 1) / rows;
+            int shade = (unlocked ? 83 : 67) + row * 3;
+            setColor(Color.rgb(shade, shade + 2, shade + 1));
+            canvas.drawRect(bounds.left, top, bounds.right, bottom, paint);
+        }
+
+        setStrokeColor(Color.argb(unlocked ? 80 : 115, 15, 19, 20));
+        paint.setStrokeWidth(0.8f * density);
+        for (int column = 1; column < 7; column++) {
+            float x = bounds.left + bounds.width() * column / 7f;
+            float topInset = (column - 3.5f) * 0.8f * density;
+            canvas.drawLine(bounds.centerX() + topInset, wallBottom,
+                    x, bounds.bottom, paint);
+        }
+        for (int row = 1; row <= rows; row++) {
+            float y = wallBottom + (bounds.bottom - wallBottom) * row / rows;
+            canvas.drawLine(bounds.left, y, bounds.right, y, paint);
+        }
+
+        setColor(Color.argb(unlocked ? 24 : 48, 13, 15, 15));
+        for (int index = 0; index < 4; index++) {
+            float x = bounds.left + bounds.width() * (0.13f + index * 0.22f);
+            float y = wallBottom + (bounds.bottom - wallBottom) * (0.33f + index % 2 * 0.3f);
+            canvas.drawOval(x, y, x + tileHeight * 0.8f, y + tileHeight * 0.3f, paint);
+        }
+    }
+
+    private void drawWallPanels(Canvas canvas, RectF bounds, float wallBottom, Room room) {
+        setColor(Color.argb(90, 12, 17, 20));
+        float inset = bounds.width() * 0.07f;
+        float panelTop = bounds.top + bounds.height() * 0.12f;
+        float panelBottom = wallBottom - bounds.height() * 0.1f;
+        float panelGap = Math.max(4f * density, bounds.width() * 0.025f);
+        float panelWidth = (bounds.width() - 2f * inset - panelGap * 2f) / 3f;
+        for (int panel = 0; panel < 3; panel++) {
+            float left = bounds.left + inset + panel * (panelWidth + panelGap);
+            RectF panelRect = new RectF(left, panelTop, left + panelWidth, panelBottom);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(0.8f * density);
+            setStrokeColor(Color.argb(70, 164, 170, 153));
+            canvas.drawRect(panelRect, paint);
+            paint.setStyle(Paint.Style.FILL);
+            if (panel == 1) {
+                setColor(Color.argb(75, 184, 176, 129));
+                canvas.drawRect(panelRect.left + panelRect.width() * 0.12f,
+                        panelRect.top + panelRect.height() * 0.18f,
+                        panelRect.right - panelRect.width() * 0.12f,
+                        panelRect.top + panelRect.height() * 0.64f, paint);
+                setColor(Color.argb(100, 27, 34, 36));
+                canvas.drawRect(panelRect.left, panelRect.top + panelRect.height() * 0.7f,
+                        panelRect.right, panelRect.bottom, paint);
+            } else {
+                setColor(Color.argb(70, 9, 14, 17));
+                canvas.drawRect(panelRect.left + panelRect.width() * 0.14f,
+                        panelRect.top + panelRect.height() * 0.2f,
+                        panelRect.right - panelRect.width() * 0.14f,
+                        panelRect.bottom - panelRect.height() * 0.12f, paint);
             }
         }
 
-        if (room.getName().contains("Cela")) {
-            paint.setStrokeWidth(2f * density);
-            setStrokeColor(Color.argb(unlocked ? 105 : 135, 22, 25, 28));
-            float barSpacing = 18f * density;
-            for (float x = bounds.left + 12f * density; x < bounds.right; x += barSpacing) {
-                canvas.drawLine(x, bounds.top, x, bounds.bottom, paint);
-            }
-            setColor(Color.argb(100, 145, 153, 143));
-            canvas.drawRoundRect(bounds.left + 18f * density, bounds.top + 17f * density,
-                    bounds.left + 60f * density, bounds.top + 31f * density,
-                    4f * density, 4f * density, paint);
-        } else if (room.getName().contains("Arsenal")) {
-            setColor(Color.argb(105, 27, 35, 40));
-            canvas.drawRect(bounds.left + 15f * density, bounds.top + 17f * density,
-                    bounds.right - 15f * density, bounds.top + 26f * density, paint);
-            paint.setStrokeWidth(1.5f * density);
-            setStrokeColor(Color.argb(135, 205, 176, 113));
-            for (int index = 0; index < 4; index++) {
-                float rackX = bounds.left + (34f + index * 20f) * density;
-                canvas.drawLine(rackX, bounds.top + 7f * density,
-                        rackX + 5f * density, bounds.top + 17f * density, paint);
-            }
-        } else {
-            setColor(Color.argb(115, 38, 42, 42));
-            canvas.drawRoundRect(bounds.centerX() - 34f * density,
-                    bounds.centerY() - 11f * density, bounds.centerX() + 34f * density,
-                    bounds.centerY() + 8f * density, 5f * density, 5f * density, paint);
-            setColor(Color.argb(120, 115, 104, 78));
-            canvas.drawRect(bounds.centerX() - 30f * density, bounds.centerY() - 15f * density,
-                    bounds.centerX() + 30f * density, bounds.centerY() - 9f * density, paint);
+        setColor(Color.rgb(29, 34, 35));
+        canvas.drawRect(bounds.left, wallBottom - 2f * density,
+                bounds.right, wallBottom + 2f * density, paint);
+        drawCracks(canvas, bounds, room.getName().hashCode());
+    }
+
+    private void drawReceptionInterior(Canvas canvas, RectF bounds, float wallBottom, boolean unlocked) {
+        float scale = Math.min(bounds.width() / (300f * density), bounds.height() / (100f * density));
+        float deskLeft = bounds.left + bounds.width() * 0.12f;
+        float deskRight = bounds.left + bounds.width() * 0.7f;
+        float deskTop = wallBottom - bounds.height() * 0.02f;
+        float deskHeight = Math.max(7f * density, bounds.height() * 0.18f);
+
+        setColor(Color.argb(120, 10, 13, 14));
+        canvas.drawOval(deskLeft, deskTop + deskHeight * 0.62f,
+                deskRight + 5f * density, deskTop + deskHeight, paint);
+        setColor(unlocked ? Color.rgb(82, 77, 61) : Color.rgb(50, 49, 43));
+        canvas.drawRect(deskLeft, deskTop, deskRight, deskTop + deskHeight, paint);
+        setColor(Color.rgb(117, 111, 87));
+        canvas.drawRect(deskLeft - 2f * density, deskTop - 2f * density,
+                deskRight + 2f * density, deskTop + 2f * density, paint);
+
+        float monitorX = deskLeft + (deskRight - deskLeft) * 0.68f;
+        float monitorY = deskTop - 8f * scale;
+        setColor(Color.rgb(18, 25, 27));
+        canvas.drawRoundRect(monitorX, monitorY, monitorX + 10f * scale,
+                deskTop - 1f * density, 1f * density, 1f * density, paint);
+        setColor(Color.argb(130, 102, 150, 132));
+        canvas.drawRect(monitorX + 1f * scale, monitorY + 1f * scale,
+                monitorX + 9f * scale, monitorY + 6f * scale, paint);
+
+        for (int chair = 0; chair < 2; chair++) {
+            float chairX = bounds.left + bounds.width() * (0.82f + chair * 0.08f);
+            float chairY = wallBottom - bounds.height() * 0.04f;
+            setColor(Color.rgb(53, 48, 40));
+            canvas.drawRoundRect(chairX, chairY, chairX + 6f * scale,
+                    chairY + 9f * scale, 2f * scale, 2f * scale, paint);
+            setStrokeColor(Color.rgb(24, 29, 30));
+            paint.setStrokeWidth(1.2f * scale);
+            canvas.drawLine(chairX + 3f * scale, chairY + 8f * scale,
+                    chairX + 3f * scale, chairY + 12f * scale, paint);
         }
-        canvas.restore();
+    }
+
+    private void drawArsenalInterior(Canvas canvas, RectF bounds, float wallBottom, boolean unlocked) {
+        float rackTop = bounds.top + bounds.height() * 0.16f;
+        float rackBottom = wallBottom + (bounds.bottom - wallBottom) * 0.54f;
+        float rackLeft = bounds.left + bounds.width() * 0.08f;
+        float rackRight = bounds.right - bounds.width() * 0.08f;
+
+        setColor(Color.rgb(25, 31, 32));
+        canvas.drawRoundRect(rackLeft, rackTop, rackRight, rackBottom,
+                3f * density, 3f * density, paint);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(1.2f * density);
+        setStrokeColor(Color.rgb(103, 105, 89));
+        canvas.drawRoundRect(rackLeft, rackTop, rackRight, rackBottom,
+                3f * density, 3f * density, paint);
+        paint.setStyle(Paint.Style.FILL);
+
+        for (int shelf = 1; shelf <= 2; shelf++) {
+            float y = rackTop + (rackBottom - rackTop) * shelf / 3f;
+            setColor(Color.rgb(84, 83, 68));
+            canvas.drawRect(rackLeft, y, rackRight, y + 1.5f * density, paint);
+        }
+        for (int locker = 1; locker <= 4; locker++) {
+            float x = rackLeft + (rackRight - rackLeft) * locker / 5f;
+            setStrokeColor(Color.rgb(72, 81, 78));
+            paint.setStrokeWidth(1f * density);
+            canvas.drawLine(x, rackTop, x, rackBottom, paint);
+        }
+
+        for (int item = 0; item < 8; item++) {
+            float x = rackLeft + (rackRight - rackLeft) * (0.08f + (item % 4) * 0.24f);
+            float y = rackTop + (rackBottom - rackTop) * (0.18f + (item / 4) * 0.35f);
+            float itemWidth = Math.max(4f * density, bounds.width() * 0.035f);
+            setColor(item % 2 == 0 ? Color.rgb(100, 105, 91) : Color.rgb(57, 70, 70));
+            canvas.drawRoundRect(x, y, x + itemWidth, y + bounds.height() * 0.12f,
+                    2f * density, 2f * density, paint);
+            setColor(Color.rgb(151, 139, 99));
+            canvas.drawCircle(x + itemWidth * 0.5f, y + bounds.height() * 0.14f,
+                    1.2f * density, paint);
+        }
+
+        if (!unlocked) {
+            setColor(Color.argb(165, 16, 20, 21));
+            canvas.drawRect(rackLeft, rackTop, rackRight, rackBottom, paint);
+        }
+    }
+
+    private void drawCellInterior(Canvas canvas, RectF bounds, float wallBottom, boolean unlocked) {
+        float cellLeft = bounds.left + bounds.width() * 0.1f;
+        float cellRight = bounds.right - bounds.width() * 0.1f;
+        float cellTop = bounds.top + bounds.height() * 0.18f;
+        float cellBottom = wallBottom + (bounds.bottom - wallBottom) * 0.8f;
+
+        setColor(Color.rgb(24, 29, 30));
+        canvas.drawRect(cellLeft, cellTop, cellRight, cellBottom, paint);
+        setColor(Color.argb(100, 137, 142, 128));
+        canvas.drawRect(cellLeft, cellTop, cellRight, cellTop + 2f * density, paint);
+
+        int prisonerCount = Math.min(3, celasOcupadas);
+        for (int index = 0; index < prisonerCount; index++) {
+            float x = cellLeft + (cellRight - cellLeft) * (0.25f + index * 0.25f);
+            float y = cellBottom - 7f * density;
+            float bob = (float) Math.sin(animationSeconds * 1.8f + index) * 0.6f * density;
+            setColor(index % 2 == 0 ? Color.rgb(126, 91, 67) : Color.rgb(73, 82, 88));
+            canvas.drawRoundRect(x - 3f * density, y - 10f * density + bob,
+                    x + 3f * density, y + bob, 2f * density, 2f * density, paint);
+            setColor(Color.rgb(173, 137, 105));
+            canvas.drawCircle(x, y - 13f * density + bob, 2.4f * density, paint);
+        }
+
+        paint.setStrokeWidth(1.4f * density);
+        setStrokeColor(Color.argb(unlocked ? 175 : 220, 121, 132, 133));
+        float barSpacing = Math.max(8f * density, bounds.width() * 0.055f);
+        for (float x = cellLeft; x <= cellRight; x += barSpacing) {
+            canvas.drawLine(x, cellTop, x, cellBottom, paint);
+        }
+        setColor(Color.rgb(111, 121, 121));
+        canvas.drawRect(cellLeft - density, cellTop, cellRight + density,
+                cellTop + 2f * density, paint);
+        canvas.drawRect(cellLeft - density, cellBottom - 2f * density,
+                cellRight + density, cellBottom, paint);
+        setColor(Color.argb(130, 191, 160, 96));
+        canvas.drawCircle(cellLeft + (cellRight - cellLeft) * 0.5f,
+                cellTop + 4f * density, 1.5f * density, paint);
+    }
+
+    private void drawRubble(Canvas canvas, RectF bounds) {
+        for (int index = 0; index < 7; index++) {
+            float x = bounds.left + bounds.width() * ((index * 37f + 13f) % 90f) / 100f;
+            float y = bounds.bottom - (3f + (index % 3) * 2f) * density;
+            float size = (2f + index % 3) * density;
+            setColor(Color.rgb(54 + index % 3 * 5, 54 + index % 2 * 3, 49));
+            scenePath.reset();
+            scenePath.moveTo(x, y);
+            scenePath.lineTo(x + size, y - size * 0.4f);
+            scenePath.lineTo(x + size * 1.4f, y + size * 0.15f);
+            scenePath.close();
+            canvas.drawPath(scenePath, paint);
+        }
+    }
+
+    private void drawCracks(Canvas canvas, RectF bounds, int seed) {
+        int normalizedSeed = Math.abs(seed % 997);
+        for (int index = 0; index < 2; index++) {
+            float startX = bounds.left + bounds.width() * (0.15f + ((normalizedSeed + index * 31) % 55) / 100f);
+            float startY = bounds.top + bounds.height() * (0.12f + index * 0.2f);
+            setStrokeColor(Color.argb(65, 10, 14, 15));
+            paint.setStrokeWidth(0.9f * density);
+            scenePath.reset();
+            scenePath.moveTo(startX, startY);
+            scenePath.lineTo(startX + 3f * density, startY + 5f * density);
+            scenePath.lineTo(startX + 1f * density, startY + 9f * density);
+            scenePath.lineTo(startX + 5f * density, startY + 13f * density);
+            canvas.drawPath(scenePath, paint);
+        }
     }
 
     private void drawPlayer(Canvas canvas) {
